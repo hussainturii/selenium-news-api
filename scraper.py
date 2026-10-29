@@ -1,5 +1,6 @@
 """Use Selenium/Chrome to search and read the assigned Ars Technica source."""
 from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 import logging
 import os
 import re
@@ -17,6 +18,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 LOGGER = logging.getLogger(__name__)
 NEWS_SOURCE = 'Ars Technica'
 FEED_URL = 'https://feeds.arstechnica.com/arstechnica/index'
+FEED_URLS = [
+    FEED_URL,
+    'https://feeds.arstechnica.com/arstechnica/technology-lab',
+    'https://feeds.arstechnica.com/arstechnica/gadgets',
+    'https://feeds.arstechnica.com/arstechnica/science',
+    'https://feeds.arstechnica.com/arstechnica/tech-policy',
+]
 ARTICLE_PATH = re.compile(r'^/[^/]+/\d{4}/\d{2}/[^/]+/?$')
 
 
@@ -121,27 +129,39 @@ def read_article(driver, url: str) -> tuple[str, str]:
 def read_feed(driver) -> list[Article]:
     """Read publicly published RSS through Chrome; no CAPTCHA bypass."""
     driver.get(FEED_URL)
-    payload = driver.execute_async_script('''
+    payloads = driver.execute_async_script('''
+        const urls = arguments[0];
         const done = arguments[arguments.length - 1];
-        fetch(window.location.href)
-          .then(response => { if (!response.ok) throw new Error('RSS HTTP ' + response.status); return response.text(); })
-          .then(text => done({text: text}))
-          .catch(error => done({error: String(error)}));
-    ''')
-    if payload.get('error'):
-        raise SourceError('The public Ars Technica RSS feed could not be read.')
-    try:
-        root = ET.fromstring(payload['text'])
-    except (ET.ParseError, KeyError) as error:
-        raise SourceError('The source did not return a valid RSS feed.') from error
-    articles = []
-    for item in root.findall('./channel/item'):
-        url = canonical_article(item.findtext('link') or '')
-        title = item.findtext('title') or ''
-        content = item.findtext('{http://purl.org/rss/1.0/modules/content/}encoded') or item.findtext('description') or ''
-        if url and content:
-            articles.append(Article(url, title, clean_html(content), 'public-rss'))
-    return articles
+        Promise.all(urls.map(url =>
+          fetch(url, {signal: AbortSignal.timeout(12000)})
+            .then(response => { if (!response.ok) throw new Error('RSS HTTP ' + response.status); return response.text(); })
+            .then(text => ({text: text}))
+            .catch(error => ({error: String(error)}))
+        )).then(done);
+    ''', FEED_URLS)
+    if not isinstance(payloads, list):
+        raise SourceError('The public Ars Technica RSS feeds could not be read.')
+    articles = {}
+    for payload in payloads:
+        if payload.get('error'):
+            continue
+        try:
+            root = ET.fromstring(payload.get('text', ''))
+        except ET.ParseError:
+            continue
+        for item in root.findall('./channel/item'):
+            url = canonical_article(item.findtext('link') or '')
+            title = item.findtext('title') or ''
+            content = item.findtext('{http://purl.org/rss/1.0/modules/content/}encoded') or item.findtext('description') or ''
+            if url and content and url not in articles:
+                try:
+                    published = parsedate_to_datetime(item.findtext('pubDate') or '').timestamp()
+                except (ValueError, TypeError, OverflowError):
+                    published = 0
+                articles[url] = (published, Article(url, title, clean_html(content), 'public-rss'))
+    if not articles:
+        raise SourceError('The source did not return any readable public RSS entries.')
+    return [article for _, article in sorted(articles.values(), key=lambda entry: entry[0], reverse=True)]
 
 
 def search_and_read(keyword: str) -> Article:

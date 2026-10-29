@@ -41,7 +41,7 @@ The URL above illustrates the response structure; live requests return a real re
 
 1. Selenium starts headless Google Chrome and visits Ars Technica's search page with the requested keyword.
 2. It selects the first valid Ars article from the normal search results and extracts its paragraphs.
-3. Ars may require human verification. The application does not solve or bypass that check. When native search is unavailable, Chrome reads the source's officially published public RSS feed and searches its titles and available text. It chooses the first matching feed item in the source's published order.
+3. Ars may require human verification. The application does not solve or bypass that check. When native search is unavailable, Chrome reads the source's officially published main, Technology Lab, Gadgets, Science, and Tech Policy RSS feeds and searches their titles and available text. It deduplicates the entries, orders them newest first, and chooses the first matching result.
 4. Chrome attempts to read that item's article page. If the article page is blocked, it summarizes the text the publisher made publicly available in RSS.
 5. A deterministic sentence-frequency summarizer selects up to three sentences, preserving their source order, and caps the result at 100 words.
 

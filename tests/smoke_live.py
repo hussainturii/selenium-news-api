@@ -3,7 +3,7 @@ import argparse
 import json
 import time
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from urllib.parse import quote
 
@@ -13,8 +13,15 @@ parser.add_argument('--keyword', default='space')
 parser.add_argument('--output')
 args = parser.parse_args()
 start = time.monotonic()
-with urlopen(args.base_url + '/health', timeout=10) as response:
-    assert json.load(response)['registration'] == 'SP23-BAI-057'
+for attempt in range(20):
+    try:
+        with urlopen(args.base_url + '/health', timeout=3) as response:
+            assert json.load(response)['registration'] == 'SP23-BAI-057'
+        break
+    except (URLError, ConnectionError, TimeoutError):
+        if attempt == 19:
+            raise
+        time.sleep(0.5)
 with urlopen(args.base_url + '/', timeout=10) as response:
     assert 'SP23-BAI-057' in response.read().decode()
 try:
