@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ registration }} | Ars Technica News API</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #142538; background: #f3f6fa; }
+    main { max-width: 780px; margin: 7vh auto; padding: 32px; background: white; border: 1px solid #dce4ee; border-radius: 16px; }
+    .label { color: #536a80; font-size: 14px; } h1 { margin: 8px 0; } .registration { font-weight: 700; color: #17624d; }
+    form { display: flex; gap: 10px; margin: 28px 0; } input { flex: 1; min-width: 0; padding: 12px; border: 1px solid #a7b8c8; border-radius: 6px; font: inherit; }
+    button { padding: 12px 20px; background: #174b72; color: white; border: 0; border-radius: 6px; cursor: pointer; font: inherit; }
+    button:disabled { opacity: .6; } #result { line-height: 1.65; } #status { color: #536a80; } a { color: #175a92; } code { word-break: break-word; } small { display: block; line-height: 1.6; color: #536a80; }
+  </style>
+</head>
+<body><main>
+  <div class="label">CSC418 · Lab Assignment 4</div>
+  <h1>Ars Technica News API</h1>
+  <p class="registration">{{ registration }} · Hussain</p>
+  <p>Search {{ source }} and read a short extractive summary of the first available matching article.</p>
+  <form id="search"><input id="keyword" name="keyword" aria-label="News keyword" placeholder="Try space, AI, or NASA" maxlength="200" required><button id="submit">Search</button></form>
+  <p id="status" role="status"></p><section id="result" aria-live="polite"></section>
+  <small>API: <code>GET /get?keyword=space</code><br>Native search is attempted first. If it requires human verification, search uses the source's public RSS feed (currently published articles only). The response header identifies the method used.</small>
+</main>
+<script>
+document.querySelector('#search').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = document.querySelector('#submit'), status = document.querySelector('#status'), result = document.querySelector('#result');
+  button.disabled = true; status.textContent = 'Searching the news source…'; result.replaceChildren();
+  try {
+    const response = await fetch('/get?keyword=' + encodeURIComponent(document.querySelector('#keyword').value));
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'The request failed.');
+    const summary = document.createElement('p'); summary.textContent = data.summary;
+    const link = document.createElement('a'); link.href = data.url; link.textContent = 'Read the original article'; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    result.append(summary, link); status.textContent = 'Source: ' + data.newssource + ' · ' + response.headers.get('X-Search-Method');
+  } catch (error) { status.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+</script></body></html>
